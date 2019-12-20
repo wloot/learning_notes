@@ -1,0 +1,39 @@
+1. 限制某个端口同时连接的ip数量
+
+# connlimit 统计此端口同一时间符合条件（--connlimit-mask）的所有数据包数量 符合限制（--connlimit-above）则执行 -j
+# --connlimit-mask 为ipv4二进制掩码1的数量 0-32 从右往左
+# RETURN 和 ACCEPT 的区别：
+# RETURN 直接返回上层（父）链表继续执行，ACCEPT 允许此数据包，终止链表
+# 此行，为每个ip匹配非第一个数据包并返回值父链表，而第一个数据包将会继续向下执行
+iptables -I DOCKER-USER 1 -p tcp --dport 443  -m connlimit --connlimit-above 1 --connlimit-mask 32 -j RETURN
+
+# 此行，将全体ip（--connlimit-mask 0）的所有第一个数据包（第一行）统计在一起，如果小于等于10则 RETURN， 反之
+# 即有大于10个ip同时连接，向下执行
+iptables -I DOCKER-USER 2 -p tcp --dport 443  -m connlimit --connlimit-upto 10 --connlimit-mask 0 -j RETURN
+
+# REJECT 和 DROP 的区别： REJECT 将向客户端返回一个拒绝访问的数据包， DROP 丢弃此数据包 不回应客户端
+# 此行， REJECT掉10以外ip的第一个数据包 客户端将停止继续请求
+iptables -I DOCKER-USER 3 -p tcp --dport 443 -j REJECT
+
+# 对于其他类型的数据包不处理
+iptables -I DOCKER-USER 4 -j RETURN
+
+# -I [链表名] [行数（可选，默认为1）] 向某行插入
+# -A [链表名] 向行尾插入
+
+2. 限制ping数据包大小
+
+# iptables 支持对数据做区间处理
+# --length num #匹配指定大小的数据
+#! --length num #匹配非指定大小数据(!在选项参数之前， 而且可以对ip使用，表示排除）
+# --length num: #匹配大于或等于
+# --length :mun #匹配小于或等于
+# --length num:num #匹配指定区间
+
+# --icmp-type 具体数值可参考 https://baike.baidu.com/item/ICMP
+# 其中0为ping应答 8为ping请求
+# 虽然 win 默认ping包大小为32字节 但ping请求的ICMP报文还有固定的28字节额外内容
+iptables -I INPUT -p icmp --icmp-type 8 -m length --length 61：-j DROP
+
+
+
